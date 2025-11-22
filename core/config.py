@@ -9,7 +9,7 @@ config_manager.register_config(ConfigItem(
 ))
 config_manager.register_config(ConfigItem(
     key="robot_qq", 
-    default="1972693082", 
+    default="替换你机器人的QQ", 
     description="机器人QQ号", 
     required=True
 ))
@@ -21,7 +21,7 @@ config_manager.register_config(ConfigItem(
 ))
 config_manager.register_config(ConfigItem(
     key="master_qq", 
-    default="192004908", 
+    default="替换你用于管理bot的QQ", 
     description="主人QQ号", 
     required=True
 ))
