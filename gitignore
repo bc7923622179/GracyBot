@@ -1,0 +1,5 @@
+config.json
+Plugins/*
+!Plugins/Update_Plugin
+!Plugins/OpenAI_plugin
+!Plugins/MonitorPlugin
