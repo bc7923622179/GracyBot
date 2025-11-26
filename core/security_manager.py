@@ -269,9 +269,11 @@ class SecurityManager:
                 )
                 return False, f"检测到危险命令模式：{pattern}"
         
-        # 检查敏感字符（防注入）
-        sensitive_pattern = r'[\;\&\|\$\<\>\'\"`]'
-        if re.search(sensitive_pattern, content):
+        # 检查敏感字符（防注入）- 排除命令前缀斜杠
+        sensitive_pattern = r'[\;\&\|\$\<\>\'\"\`]'
+        # 允许命令前缀的斜杠，但检查其他位置的敏感字符
+        content_without_prefix = content[1:] if content.startswith('/') else content
+        if re.search(sensitive_pattern, content_without_prefix):
             logger_manager.log_with_context(
                     "warning",
                     "检测到敏感字符",
@@ -452,16 +454,15 @@ class SecurityManager:
             if len(command) > 200:
                 return False
                 
-            # 检查命令是否包含危险模式
-            # 复用filter_dangerous_content方法的逻辑
-            is_safe, _ = self.filter_dangerous_content(command)
-            if not is_safe:
-                return False
-                
-            # 检查是否为已知的安全命令
+            # 首先检查是否为已知的安全命令（优先级最高）
             safe_commands = ["/关于", "/help", "/菜单"]
             if command.strip() in safe_commands:
                 return True
+                
+            # 对于非安全命令，进行危险模式检查
+            is_safe, _ = self.filter_dangerous_content(command)
+            if not is_safe:
+                return False
                 
             # 其他命令默认通过基础验证
             return True

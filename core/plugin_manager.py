@@ -110,6 +110,56 @@ class PluginManager:
         
         return True, ""
 
+    def _convert_adapter_to_meta(self, adapter_data: Dict, plugin_name: str) -> Dict:
+        """将adapter.json格式转换为PLUGIN_META格式
+        
+        Args:
+            adapter_data: adapter.json文件内容
+            plugin_name: 插件目录名称
+            
+        Returns:
+            转换后的PLUGIN_META字典
+        """
+        # 基础字段映射
+        meta = {
+            "name": adapter_data.get("name", plugin_name),
+            "version": adapter_data.get("version", "1.0.0"),
+            "description": adapter_data.get("description", ""),
+            "author": adapter_data.get("author", ""),
+            "chat_type": adapter_data.get("chat_type", ["private", "group"]),
+            "permission": adapter_data.get("permission", "all"),
+            "is_at_required": adapter_data.get("is_at_required", False)
+        }
+        
+        # 处理commands字段
+        commands = []
+        if "commands" in adapter_data:
+            # 如果commands是列表，直接使用
+            if isinstance(adapter_data["commands"], list):
+                commands = adapter_data["commands"]
+            # 如果commands是字典，提取命令列表
+            elif isinstance(adapter_data["commands"], dict):
+                commands = list(adapter_data["commands"].keys())
+        
+        meta["commands"] = commands
+        
+        # 处理handler字段
+        if "handler" in adapter_data:
+            meta["handler"] = adapter_data["handler"]
+        else:
+            # 默认handler命名规则
+            meta["handler"] = f"handle_{plugin_name.replace('_plugin', '').replace('-', '_')}"
+        
+        # 处理依赖项
+        if "dependencies" in adapter_data:
+            meta["dependencies"] = adapter_data["dependencies"]
+        
+        # 处理配置项
+        if "config" in adapter_data:
+            meta["config"] = adapter_data["config"]
+        
+        return meta
+
     def init(self, plugin_dir: str = "./plugins") -> None:
         """初始化入口：扫描插件目录并注册所有合法插件（bot.py仅需调用这1行）"""
         if self._initialized:
@@ -166,27 +216,57 @@ class PluginManager:
             if not os.path.isdir(plugin_path):
                 logger.debug(f"⚠️ 跳过非目录项：{plugin_name}（不是插件目录）")
                 continue
-            # 插件目录必须包含 __init__.py（元信息文件）
-            if "__init__.py" not in os.listdir(plugin_path):
-                logger.warning(f"❌ 插件 {plugin_name} 目录下缺失 __init__.py，跳过加载")
+            
+            # 检查插件目录是否包含必要的元信息文件
+            plugin_files = os.listdir(plugin_path)
+            has_init_py = "__init__.py" in plugin_files
+            has_adapter_json = "adapter.json" in plugin_files
+            
+            # 必须至少有一个元信息文件
+            if not has_init_py and not has_adapter_json:
+                logger.warning(f"❌ 插件 {plugin_name} 目录下缺失元信息文件（__init__.py 或 adapter.json），跳过加载")
                 continue
 
             try:
-                # 动态导入插件的 __init__.py，读取元信息
-                init_file_path = os.path.join(plugin_path, "__init__.py")
-                spec = importlib.util.spec_from_file_location(
-                    name=f"plugins.{plugin_name}",
-                    location=init_file_path
-                )
-                plugin_meta_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(plugin_meta_module)
+                plugin_meta = None
+                
+                # 优先使用adapter.json文件（如果存在）
+                if has_adapter_json:
+                    adapter_file_path = os.path.join(plugin_path, "adapter.json")
+                    try:
+                        with open(adapter_file_path, 'r', encoding='utf-8') as f:
+                            adapter_data = json.load(f)
+                        
+                        # 转换adapter.json格式为PLUGIN_META格式
+                        plugin_meta = self._convert_adapter_to_meta(adapter_data, plugin_name)
+                        logger.info(f"📄 插件 {plugin_name} 使用 adapter.json 元信息")
+                    except Exception as e:
+                        logger.error(f"❌ 读取插件 {plugin_name} 的 adapter.json 失败: {str(e)}")
+                
+                # 如果adapter.json不存在或读取失败，使用__init__.py
+                if plugin_meta is None and has_init_py:
+                    # 动态导入插件的 __init__.py，读取元信息
+                    init_file_path = os.path.join(plugin_path, "__init__.py")
+                    spec = importlib.util.spec_from_file_location(
+                        name=f"plugins.{plugin_name}",
+                        location=init_file_path
+                    )
+                    plugin_meta_module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(plugin_meta_module)
 
-                # 校验元信息是否存在且完整
-                if not hasattr(plugin_meta_module, "PLUGIN_META"):
-                    logger.error(f"❌ 插件 {plugin_name} 的 __init__.py 中缺失 PLUGIN_META 元信息，跳过加载")
+                    # 校验元信息是否存在且完整
+                    if not hasattr(plugin_meta_module, "PLUGIN_META"):
+                        logger.error(f"❌ 插件 {plugin_name} 的 __init__.py 中缺失 PLUGIN_META 元信息，跳过加载")
+                        continue
+                    
+                    plugin_meta = plugin_meta_module.PLUGIN_META
+                    logger.info(f"📄 插件 {plugin_name} 使用 __init__.py 元信息")
+                
+                # 如果两种方式都失败，跳过该插件
+                if plugin_meta is None:
+                    logger.error(f"❌ 插件 {plugin_name} 无法读取元信息，跳过加载")
                     continue
                 
-                plugin_meta = plugin_meta_module.PLUGIN_META
                 # 必选元信息字段（缺失则视为非法插件）
                 required_meta_fields = ["name", "commands", "handler", "chat_type", "permission"]
                 if not all(field in plugin_meta for field in required_meta_fields):
