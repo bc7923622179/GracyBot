@@ -11,7 +11,7 @@ from core.config import (
     MASTER_QQ,
     NAPCAT_HTTP_URL,
     LOG_ENCODING,
-    ROBOT_QQ  # 新增导入，用于过滤@符号
+    ROBOT_QQ  
 )
 logger = logging.getLogger("GracyBot-HTTP-Pure")
 
@@ -81,7 +81,7 @@ def get_system_info() -> Dict[str, str]:
         "系统运行时长": system_uptime,
         "机器人启动时长": robot_uptime,
         "机器人版本": BOT_VERSION,
-        "作者QQ": MASTER_QQ,
+        "作者QQ": "192004908",
         "运行状态": status_final
     }
 
@@ -130,5 +130,5 @@ def handle_sysinfo_plugin(self_bot, bot, message, user_id, chat_type, permission
         return  # 放行其他插件的指令，交给对应插件处理
 
 # ========== 插件实例化+函数暴露（固定写法，必须保留） ==========
-# 注意：此类写法仅用于非类封装的插件，保持与插件管理器适配
+# 用于非类封装的插件，保持与插件管理器适配
 # 若后续改为类封装，可参考猜数字插件格式，此处暂保持兼容
